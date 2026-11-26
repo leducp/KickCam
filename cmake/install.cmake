@@ -5,6 +5,9 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 # --- Headers ---
+install(DIRECTORY include/kickcam
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 # version.h is generated (cmake/version.cmake), not committed -- install it
 # alongside the committed headers.
 install(FILES ${KICKCAM_VERSION_H}
@@ -13,7 +16,10 @@ install(FILES ${KICKCAM_VERSION_H}
 
 # --- Library target + export ---
 set_target_properties(kickcam PROPERTIES EXPORT_NAME kickcam)
-install(TARGETS kickcam EXPORT kickcamTargets)
+install(TARGETS kickcam EXPORT kickcamTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 
 # --- pkg-config ---
 configure_file(

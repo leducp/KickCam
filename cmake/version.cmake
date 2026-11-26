@@ -123,6 +123,6 @@ add_custom_target(kickcam_version DEPENDS "${KICKCAM_VERSION_H}")
 
 # Expose the generated header on the library's public include path and make
 # sure it is generated before anything that includes it compiles.
-target_include_directories(kickcam INTERFACE
+target_include_directories(kickcam PUBLIC
     $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/generated>)
 add_dependencies(kickcam kickcam_version)

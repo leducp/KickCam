@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(kickcam LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -39,13 +39,33 @@ if(ENABLE_UBSAN)
 endif()
 
 # --- Library ---
-# INTERFACE until the first sources land (docs/PLAN.md, phase 1).
-add_library(kickcam INTERFACE)
+find_package(tinyxml2 REQUIRED CONFIG)
+
+add_library(kickcam STATIC
+    src/Error.cc
+    src/genapi/NodeBase.cc
+    src/genapi/NodeMap.cc
+    src/genapi/Nodes.cc
+    src/genapi/Parser.cc
+    src/genapi/RegisterNodes.cc
+    src/genapi/Value.cc
+)
 
 include(GNUInstallDirs)
-target_include_directories(kickcam INTERFACE
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+target_include_directories(kickcam
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+target_link_libraries(kickcam PRIVATE tinyxml2::tinyxml2)
+target_compile_features(kickcam PUBLIC cxx_std_23)
+
+# The wheel folds the static library into the Python module, a shared object.
+if(SKBUILD)
+    set_target_properties(kickcam PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # --- Version header (generated from git: cmake/version.cmake) ---
 include(cmake/version.cmake)

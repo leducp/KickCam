@@ -38,29 +38,18 @@ manylinux-aarch64-image = "manylinux_2_28"
 build = ["cp310-*", "cp311-*", "cp312-*"]
 skip = ["cp310-musllinux*", "cp311-musllinux*", "cp312-musllinux*"]
 
-[[tool.cibuildwheel.overrides]]
-# nanobind does not support Stable ABI for Python < 3.12 - Linux
-select = "cp3{10,11}-*linux*"
-config-settings = { "cmake.define.CMAKE_CI_BUILD" = true, "cmake.define.CMAKE_FIND_ROOT_PATH" = "/tmp/kickcam_build_config", "cmake.define.CMAKE_TOOLCHAIN_FILE" = "/tmp/kickcam_build_config/toolchain.cmake" }
-repair-wheel-command = [
-  "auditwheel repair --zip-compression-level=9 -w {dest_dir} {wheel}"
-]
-
-[[tool.cibuildwheel.overrides]]
-# nanobind does not support Stable ABI for Python < 3.12 - macOS
-select = "cp3{10,11}-macosx*"
-config-settings = { "cmake.define.CMAKE_CI_BUILD" = true, "cmake.define.CMAKE_OSX_DEPLOYMENT_TARGET" = "11.0", "cmake.define.CMAKE_FIND_ROOT_PATH" = "/tmp/kickcam_build_config", "cmake.define.CMAKE_TOOLCHAIN_FILE" = "/tmp/kickcam_build_config/toolchain.cmake" }
-repair-wheel-command = [
-  "delocate-wheel -w {dest_dir} {wheel}"
-]
-
+# Flat keys: cibuildwheel passes a nested table to the backend as one opaque value.
 [tool.cibuildwheel.config-settings]
-"wheel.py-api" = "cp312"
+"cmake.define.CMAKE_FIND_ROOT_PATH" = "/tmp/kickcam_build_config"
+"cmake.define.CMAKE_TOOLCHAIN_FILE" = "/tmp/kickcam_build_config/toolchain.cmake"
 
-[tool.cibuildwheel.config-settings.cmake.define]
-CMAKE_CI_BUILD = true
-CMAKE_FIND_ROOT_PATH = "/tmp/kickcam_build_config"
-CMAKE_TOOLCHAIN_FILE = "/tmp/kickcam_build_config/toolchain.cmake"
+[[tool.cibuildwheel.overrides]]
+# Stable ABI from Python 3.12: nanobind does not support it before.
+select = "cp312-*"
+inherit.config-settings = "append"
+inherit.repair-wheel-command = "append"
+config-settings = { "wheel.py-api" = "cp312" }
+repair-wheel-command = ["pipx run abi3audit --strict --report {dest_dir}/*.whl"]
 
 [tool.cibuildwheel.linux]
 before-all = [
@@ -68,14 +57,11 @@ before-all = [
   './scripts/setup_build.sh /tmp/kickcam_build_config',
   'source tools/setup/version.sh && sed -i "s/0\.0\.0/${VERSION}/g" pyproject.toml'
 ]
-repair-wheel-command = [
-  "auditwheel repair --zip-compression-level=9 -w {dest_dir} {wheel}",
-  "pipx run abi3audit --strict --report {dest_dir}/*.whl",
-]
+repair-wheel-command = ["auditwheel repair --zip-compression-level=9 -w {dest_dir} {wheel}"]
 
 [tool.cibuildwheel.macos]
-# universal2 → single wheel that runs on both x86_64 and Apple Silicon.
-# 11.0 = Big Sur — earliest macOS that supports Apple Silicon natively,
+# universal2: a single wheel that runs on both x86_64 and Apple Silicon.
+# 11.0 = Big Sur, the earliest macOS that supports Apple Silicon natively,
 # so it's the correct floor for universal2 wheels.  BSD sed uses `-i ''`
 # (empty backup extension) where GNU sed uses `-i` bare.
 environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
@@ -87,10 +73,7 @@ before-all = [
   "source tools/setup/version.sh && sed -i '' \"s/0\\.0\\.0/${VERSION}/g\" pyproject.toml"
 ]
 
-repair-wheel-command = [
-  "delocate-wheel -w {dest_dir} {wheel}",
-  "pipx run abi3audit --strict --report {dest_dir}/*.whl"
-]
+repair-wheel-command = ["delocate-wheel -w {dest_dir} {wheel}"]
 
 [tool.ruff]
 line-length = 120

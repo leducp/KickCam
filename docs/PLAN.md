@@ -141,7 +141,7 @@ trailer arrived.
 | Dependency | Why | License |
 |---|---|---|
 | libusb-1.0 | USB access on Linux and macOS | LGPL-2.1, linked dynamically, in the wheels too (auditwheel and delocate bundle the shared library, which users can replace) |
-| pugixml | XML parsing | MIT |
+| tinyxml2 | XML parsing, as in KickCAT | zlib |
 | zlib | inflate the zipped XML; a short single-entry zip reader sits on top | zlib |
 | GoogleTest | unit tests | BSD-3 |
 | nanobind, scikit-build-core | Python wheel | BSD-3, Apache-2.0 |
@@ -167,10 +167,6 @@ Python wheel (scikit-build-core, nanobind, uv), CI on `master` (Linux and macOS 
 cross-build, `conan create`, wheels, PyPI release on tag), CeCILL-C license, `AGENTS.md`,
 `uncrustify.cfg`.
 
-`kickcam` is an INTERFACE target that carries only `kickcam/version.h`. It becomes a static
-library with the first sources in phase 1, which also adds the header install rule and the
-recipe's `libs`.
-
 ```
 KickCam/
   include/kickcam/{genapi, u3v}
@@ -184,15 +180,28 @@ KickCam/
 
 ### 1. GenApi subset (1-2 weeks)
 
+Four stacked branches. Until the last one lands, an XML that uses a later construct fails to
+parse, with the node and the construct named.
+
+1. `genapi-nodes`: the static library, the error category, `Port`, `NodeMap::parse`, and every
+   node that needs no formula.
+2. `genapi-formula`: the formula evaluator, on its own.
+3. `genapi-swissknife`: `SwissKnife`, `IntSwissKnife`, `Converter`, `IntConverter`, and the
+   `IntSwissKnife` inside register addresses.
+4. `genapi-selectors`: `pIndex` on registers, indexed values (`pIndex` with `ValueIndexed`),
+   `pValueCopy`, `StructReg`.
+
+Content:
+
 - `Port` interface: `read(address, span)`, `write(address, span)`.
 - Node types:
   - Values: `Integer`, `Float`, `Boolean`, `Command`, `String`, `Enumeration` and `EnumEntry`.
-  - Registers: `IntReg`, `MaskedIntReg`, `FloatReg`, `StringReg`, `StructReg` and `StructEntry`,
+  - Registers: `IntReg`, `MaskedIntReg`, `FloatReg`, `StringReg`, `Register`, `StructReg` and `StructEntry`,
     with `Endianess`, `Sign`, `pAddress` and `pIndex`.
   - Computed: `Converter`, `IntConverter`, `SwissKnife`, `IntSwissKnife`.
   - Navigation: `Category`, `Port`.
-- Indirections: `pValue`, `pMin`, `pMax`, `pInc`, `pIsAvailable`, `pIsImplemented`, `pIsLocked`,
-  `pSelected`.
+- Indirections: `pValue`, `pMin`, `pMax`, `pInc`, `pIsAvailable`, `pIsImplemented`, `pIsLocked`.
+  `pSelected` only links a selector to the features it selects, so it is read and ignored.
 - Formula evaluator for SwissKnife and Converter: integer and float arithmetic, bitwise and logic
   operators, comparisons, the `?:` operator, the standard functions (`ABS`, `SQRT`, `TRUNC`, ...),
   `PI` and `E`.

@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- A C++23 compiler: GCC 12+ on Linux, Apple Clang 15+ on macOS.
-- CMake 3.15+ (3.30+ for the Python wheel).
+- A C++23 compiler: GCC 13+ on Linux, Apple Clang 16+ on macOS.
+- CMake 3.20+ (3.30+ for the Python wheel).
 - Conan 2.10+, and uv for the Python side. Install Conan with `uv tool install conan`.
 
 ## C++ build
@@ -35,12 +35,17 @@ After source changes, `cmake --build build` is enough. Rerun `setup_build.sh` wh
 
 ## Python wheel
 
-From the repository root:
+The wheel build takes its C++ dependencies from Conan. Set up a build directory first, then
+point the wheel build at it:
 
 ```bash
-uv build --wheel          # wheel in dist/
-uv pip install .          # or install into the active environment
+scripts/setup_build.sh build
+uv build --wheel \
+    -Ccmake.define.CMAKE_TOOLCHAIN_FILE=$PWD/build/toolchain.cmake \
+    -Ccmake.define.CMAKE_FIND_ROOT_PATH=$PWD/build
 ```
+
+`uv pip install .` takes the same `-C` options.
 
 CI builds the released wheels with cibuildwheel (manylinux_2_28 x86_64 and aarch64, macOS
 universal2), using uv as the build frontend. A tag `vX.Y.Z` on `master` publishes them to PyPI.

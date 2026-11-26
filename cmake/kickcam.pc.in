@@ -6,4 +6,6 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 Name: kickcam
 Description: Lean GenICam camera library: USB3 Vision first, frames into caller-owned buffers
 Version: @KICKCAM_VERSION@
+Libs: -L${libdir} -lkickcam
+Libs.private: -ltinyxml2
 Cflags: -I${includedir}

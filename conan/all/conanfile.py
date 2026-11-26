@@ -27,6 +27,9 @@ class KickcamRecipe(ConanFile):
         copy(self, "cmake/*", src=root, dst=self.export_sources_folder)
         copy(self, "LICENSE", src=root, dst=self.export_sources_folder)
 
+    def requirements(self):
+        self.requires("tinyxml2/11.0.0")
+
     def configure(self):
         if self.options.get_safe("shared"):
             self.options.rm_safe("fPIC")
@@ -66,5 +69,4 @@ class KickcamRecipe(ConanFile):
              dst=os.path.join(self.package_folder, "lib"), keep_path=False)
 
     def package_info(self):
-        # Header-only until the first sources land (docs/PLAN.md, phase 1).
-        self.cpp_info.libs = []
+        self.cpp_info.libs = ["kickcam"]

@@ -19,6 +19,7 @@ class KickcamDev(ConanFile):
     generators = "CMakeDeps"
 
     def requirements(self):
+        self.requires("tinyxml2/11.0.0")
         if self.options.unit_tests:
             self.requires("gtest/1.15.0")
 

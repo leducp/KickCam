@@ -1,5 +1,8 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+find_dependency(tinyxml2)
+
 include("${CMAKE_CURRENT_LIST_DIR}/kickcamTargets.cmake")
 
 check_required_components(kickcam)
