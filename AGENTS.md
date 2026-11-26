@@ -64,6 +64,10 @@ XML loading, feature access) favour clarity.
 - **`override` mandatory** on overriding virtuals.
 - **`inline` only with a real rationale** (`constexpr`, templates) -- bodies go in a `.cc`.
 - **No `explicit` by reflex** -- only with a concrete reason.
+- **Errors**: `std::expected<T, std::error_code>` for anything that touches a device, with
+  camera conditions in the KickCam error category. XML parsing returns
+  `std::expected<NodeMap, std::string>` naming the node and construct. No exceptions. Misuse
+  asserts.
 
 ### 5.3 Comments
 

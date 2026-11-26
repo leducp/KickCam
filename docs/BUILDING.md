@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- GCC with C++20 support on Linux, Apple Clang on macOS.
+- A C++23 compiler: GCC 12+ on Linux, Apple Clang 15+ on macOS.
 - CMake 3.15+ (3.30+ for the Python wheel).
 - Conan 2.10+, and uv for the Python side. Install Conan with `uv tool install conan`.
 
@@ -48,5 +48,5 @@ universal2), using uv as the build frontend. A tag `vX.Y.Z` on `master` publishe
 ## Conan package
 
 ```bash
-conan create conan/all --version=0.0.0 --build=missing -s compiler.cppstd=20
+conan create conan/all --version=0.0.0 --build=missing -s compiler.cppstd=23
 ```

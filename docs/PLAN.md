@@ -83,29 +83,41 @@ Rules that keep GigE Vision and GenTL from forcing a rewrite:
 - The XML location is parsed from the GenICam URL form (`Local:<file>;<address>;<length>`),
   which U3V manifests and GigE Vision URL registers share.
 
+### Errors
+
+- Everything that touches a device returns `std::expected<T, std::error_code>`: device I/O,
+  feature access, streaming. Camera-specific conditions (`timeout`, `device_lost`,
+  `not_available`, `locked`, `out_of_range`, ...) live in a KickCam error category. The frame
+  path never allocates, the error path included.
+- Parsing the XML returns `std::expected<NodeMap, std::string>`. The message names the node and
+  the construct that failed, since no caller branches on it: the fix is in KickCam.
+- Misuse (a node used as the wrong type, a buffer queued on a stopped stream) is a broken
+  contract: it asserts, it does not return an error.
+- The Python binding turns errors into exceptions.
+
 ### API sketch
 
 ```cpp
 namespace kickcam::u3v
 {
-    std::vector<DeviceInfo> list_devices();               // vendor, model, serial, bus path
+    std::expected<std::vector<DeviceInfo>, std::error_code> list_devices();
 
     class Device
     {
     public:
         Device(Transport& transport);
-        Port& port();                                     // GenCP READMEM / WRITEMEM
-        std::string xml();                                // from the manifest, unzipped
+        Port& port();                                             // GenCP READMEM / WRITEMEM
+        std::expected<std::string, std::error_code> xml();        // from the manifest, unzipped
     };
 
     class Stream
     {
     public:
-        Stream(Device& device, std::size_t payload_size);  // programs SIRM
-        void start();                                      // enable SIRM, then AcquisitionStart
-        void stop();
-        void queue(std::span<uint8_t> buffer);             // caller-owned, stays valid until returned
-        std::error_code wait(Frame& frame, nanoseconds timeout);
+        Stream(Device& device, std::size_t payload_size);
+        std::expected<void, std::error_code> start();             // program and enable SIRM, then AcquisitionStart
+        std::expected<void, std::error_code> stop();
+        void queue(std::span<uint8_t> buffer);                    // caller-owned, stays valid until returned
+        std::expected<Frame, std::error_code> wait(nanoseconds timeout);
     };
 }
 
@@ -114,8 +126,8 @@ namespace kickcam::genapi
     class NodeMap
     {
     public:
-        NodeMap(std::string_view xml, Port& port);
-        Node& node(std::string_view name);                // Integer, Float, Enumeration, ...
+        static std::expected<NodeMap, std::string> parse(std::string_view xml, Port& port);
+        Node& node(std::string_view name);                        // Integer, Float, Enumeration, ...
     };
 }
 ```
@@ -149,7 +161,7 @@ Each phase ends with its tests green in CI.
 
 ### 0. Skeleton (done)
 
-Build and tooling copied from kickmsg: `scripts/configure.sh` and `scripts/setup_build.sh`
+C++23. Build and tooling copied from kickmsg: `scripts/configure.sh` and `scripts/setup_build.sh`
 (Conan + CMake), the Conan recipe in `conan/all`, the version header generated from git, the
 Python wheel (scikit-build-core, nanobind, uv), CI on `master` (Linux and macOS tests, aarch64
 cross-build, `conan create`, wheels, PyPI release on tag), CeCILL-C license, `AGENTS.md`,
@@ -297,8 +309,4 @@ names (SFNC) already cover multi-source, 3D and depth cameras (GenDC), so one AP
 
 ## Open questions
 
-- C++ standard: the skeleton uses C++20 like kickmsg. Move to C++23 like sentry, which would
-  allow `std::expected`?
-- Error model: `std::error_code` on the frame path is settled. Should setup (open, feature
-  access) throw, like KickCAT, or also return errors?
 - Where the private collection of vendor XMLs lives.
