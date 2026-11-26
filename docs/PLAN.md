@@ -189,7 +189,7 @@ parse, with the node and the construct named.
 3. `genapi-swissknife`: `SwissKnife`, `IntSwissKnife`, `Converter`, `IntConverter`, and the
    `IntSwissKnife` inside register addresses.
 4. `genapi-selectors`: `pIndex` on registers, indexed values (`pIndex` with `ValueIndexed`),
-   `pValueCopy`, `StructReg`.
+   `pValueCopy`, `StructReg`, and an XML whose references form a cycle fails to load.
 
 Content:
 

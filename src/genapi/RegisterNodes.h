@@ -7,7 +7,7 @@ namespace kickcam::genapi
 {
     struct RegisterAccess
     {
-        // Sum of the Address and pAddress elements.
+        // Sum of the Address, pAddress, IntSwissKnife and pIndex elements.
         std::expected<uint64_t, std::error_code> address() const;
 
         // String and raw registers, whose pLength may change. A negative length fails with Errc::out_of_range.
@@ -23,7 +23,15 @@ namespace kickcam::genapi
         // Replaces the bits under mask and keeps the others, reading and writing the same address.
         std::expected<void, std::error_code> update_uint(uint64_t mask, uint64_t value) const;
 
+        // pIndex: the index times the offset, or times the register length without an offset.
+        struct Index
+        {
+            IntValue index;
+            std::optional<IntValue> offset;
+        };
+
         std::vector<IntValue> offsets;
+        std::vector<Index> indexes;
         IntValue length;
         Access mode{Access::RO};
         PortNode* port{nullptr};

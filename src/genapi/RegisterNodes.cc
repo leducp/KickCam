@@ -104,6 +104,24 @@ namespace kickcam::genapi
             }
             sum += static_cast<uint64_t>(*value);
         }
+        for (Index const& term : indexes)
+        {
+            auto index = term.index.get();
+            if (not index)
+            {
+                return std::unexpected(index.error());
+            }
+            auto step = length.get();
+            if (term.offset)
+            {
+                step = term.offset->get();
+            }
+            if (not step)
+            {
+                return std::unexpected(step.error());
+            }
+            sum += static_cast<uint64_t>(*index) * static_cast<uint64_t>(*step);
+        }
         return sum;
     }
 

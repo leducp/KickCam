@@ -179,3 +179,44 @@ TEST_F(Nodes, CategoryListsItsFeatures)
     EXPECT_EQ(root->features()[0]->name(), "ImageFormat");
     EXPECT_EQ(root->access(), Access::RO);
 }
+
+TEST_F(Nodes, IndexSelectsTheValue)
+{
+    ASSERT_TRUE(parse(R"(<Integer Name="Gain">
+                             <pIndex>Selector</pIndex>
+                             <ValueIndexed Index="0">10</ValueIndexed>
+                             <pValueIndexed Index="1">GainBlue</pValueIndexed>
+                             <ValueDefault>99</ValueDefault>
+                         </Integer>
+                         <Float Name="Ratio">
+                             <pIndex>Selector</pIndex>
+                             <ValueIndexed Index="0">1.5</ValueIndexed>
+                             <ValueDefault>0.5</ValueDefault>
+                         </Float>
+                         <Integer Name="Selector"><Value>0</Value></Integer>
+                         <Integer Name="GainBlue"><Value>20</Value><Min>5</Min><Max>50</Max></Integer>)"));
+    auto gain = map->get<Integer>("Gain");
+    auto selector = map->get<Integer>("Selector");
+    EXPECT_EQ(gain->get(), 10);
+    EXPECT_EQ(map->get<Float>("Ratio")->get(), 1.5);
+
+    ASSERT_TRUE(selector->set(1));
+    EXPECT_EQ(gain->get(), 20);
+    EXPECT_EQ(gain->min(), 5);
+    EXPECT_EQ(gain->max(), 50);
+    EXPECT_TRUE(gain->set(30));
+    EXPECT_EQ(map->get<Integer>("GainBlue")->get(), 30);
+
+    ASSERT_TRUE(selector->set(7));
+    EXPECT_EQ(gain->get(), 99);
+    EXPECT_EQ(map->get<Float>("Ratio")->get(), 0.5);
+}
+
+TEST_F(Nodes, IntegerWritesItsCopies)
+{
+    ASSERT_TRUE(parse(R"(<Integer Name="Width"><pValue>WidthReg</pValue><pValueCopy>WidthShadow</pValueCopy></Integer>
+                         <IntReg Name="WidthReg"><Address>0</Address><Length>2</Length><AccessMode>RW</AccessMode><pPort>Device</pPort></IntReg>
+                         <IntReg Name="WidthShadow"><Address>2</Address><Length>2</Length><AccessMode>RW</AccessMode><pPort>Device</pPort></IntReg>)"));
+    EXPECT_TRUE(map->get<Integer>("Width")->set(640));
+    EXPECT_EQ(port.load(0, 4), (std::vector<uint8_t>{0x80, 0x02, 0x80, 0x02}));
+}

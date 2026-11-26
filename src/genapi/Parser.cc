@@ -19,9 +19,14 @@ namespace kickcam::genapi
             "PollingTime", "ValidValueSet", "IsSelfClearing", "NumericValue", "Symbolic", "CacheChunkData", "IsLinear",
         };
 
+        // A StructReg has a Comment instead of a Name.
         std::string_view name_of(tinyxml2::XMLElement const* element)
         {
             char const* name = element->Attribute("Name");
+            if (name == nullptr)
+            {
+                name = element->Attribute("Comment");
+            }
             if (name == nullptr)
             {
                 return {};
@@ -82,6 +87,22 @@ namespace kickcam::genapi
                 return std::unexpected(invalid(child, "integer"));
             }
             return *number;
+        }
+
+        // The Index attribute of ValueIndexed and pValueIndexed.
+        std::expected<int64_t, std::string> index_key(tinyxml2::XMLElement const* child)
+        {
+            char const* index = child->Attribute("Index");
+            if (index == nullptr)
+            {
+                return std::unexpected(fail(child->Parent()->ToElement(), "no Index in <" + std::string{child->Name()} + ">"));
+            }
+            auto key = to_int(index);
+            if (not key)
+            {
+                return std::unexpected(fail(child->Parent()->ToElement(), "invalid Index '" + std::string{index} + "' in <" + child->Name() + ">"));
+            }
+            return *key;
         }
 
         std::expected<double, std::string> real(tinyxml2::XMLElement const* child)
@@ -216,6 +237,11 @@ namespace kickcam::genapi
                 return std::unexpected(configured.error());
             }
         }
+        auto acyclic = check_cycles();
+        if (not acyclic)
+        {
+            return std::unexpected(acyclic.error());
+        }
         return std::move(map_);
     }
 
@@ -223,7 +249,12 @@ namespace kickcam::genapi
     std::unique_ptr<T> Parser::make(std::string name, tinyxml2::XMLElement const* element)
     {
         auto node = std::make_unique<T>(std::move(name));
-        pending_.push_back([this, typed = node.get(), element] { return configure(*typed, element); });
+        order_.push_back(node.get());
+        pending_.push_back([this, typed = node.get(), element]
+        {
+            current_ = typed;
+            return configure(*typed, element);
+        });
         return node;
     }
 
@@ -242,46 +273,10 @@ namespace kickcam::genapi
                 continue;
             }
 
-            auto checked = new_name(element);
-            if (not checked)
+            auto created = create_node(element);
+            if (not created)
             {
-                return std::unexpected(checked.error());
-            }
-            std::string name = std::move(*checked);
-
-            if (tag == "Node")              { map_.add(make<NodeBase<Node>>(std::move(name), element)); }
-            else if (tag == "Category")     { map_.add(make<CategoryNode>(std::move(name), element)); }
-            else if (tag == "Integer")      { map_.add(make<IntegerNode>(std::move(name), element)); }
-            else if (tag == "IntReg")       { map_.add(make<IntRegNode>(std::move(name), element)); }
-            else if (tag == "MaskedIntReg") { map_.add(make<MaskedIntRegNode>(std::move(name), element)); }
-            else if (tag == "Float")        { map_.add(make<FloatNode>(std::move(name), element)); }
-            else if (tag == "FloatReg")     { map_.add(make<FloatRegNode>(std::move(name), element)); }
-            else if (tag == "Boolean")      { map_.add(make<BooleanNode>(std::move(name), element)); }
-            else if (tag == "Command")      { map_.add(make<CommandNode>(std::move(name), element)); }
-            else if (tag == "String")       { map_.add(make<StringNode>(std::move(name), element)); }
-            else if (tag == "StringReg")    { map_.add(make<StringRegNode>(std::move(name), element)); }
-            else if (tag == "Register")     { map_.add(make<RegisterNode>(std::move(name), element)); }
-            else if (tag == "SwissKnife")    { map_.add(make<SwissKnifeNode<Float, double>>(std::move(name), element)); }
-            else if (tag == "IntSwissKnife") { map_.add(make<SwissKnifeNode<Integer, int64_t>>(std::move(name), element)); }
-            else if (tag == "Converter")     { map_.add(make<ConverterNode<Float, double>>(std::move(name), element)); }
-            else if (tag == "IntConverter")  { map_.add(make<ConverterNode<Integer, int64_t>>(std::move(name), element)); }
-            else if (tag == "Port")
-            {
-                PortNode& port = map_.add(make<PortNode>(std::move(name), element));
-                ports_.emplace(port.name(), &port);
-            }
-            else if (tag == "Enumeration")
-            {
-                EnumerationNode& enumeration = map_.add(make<EnumerationNode>(std::move(name), element));
-                auto created = create_entries(enumeration, element);
-                if (not created)
-                {
-                    return created;
-                }
-            }
-            else
-            {
-                return std::unexpected(fail(element, "unsupported node type"));
+                return created;
             }
 
             // An IntSwissKnife inside a register adds to its address.
@@ -294,6 +289,68 @@ namespace kickcam::genapi
                 }
                 map_.add(make<SwissKnifeNode<Integer, int64_t>>(std::move(*knife), child));
             }
+        }
+        return {};
+    }
+
+    std::expected<void, std::string> Parser::create_node(tinyxml2::XMLElement const* element)
+    {
+        std::string_view const tag = element->Name();
+        // A StructReg is no node: each of its StructEntry elements is a MaskedIntReg.
+        if (tag == "StructReg")
+        {
+            for (auto entry = element->FirstChildElement("StructEntry"); entry != nullptr; entry = entry->NextSiblingElement("StructEntry"))
+            {
+                auto name = new_name(entry);
+                if (not name)
+                {
+                    return std::unexpected(name.error());
+                }
+                map_.add(make<MaskedIntRegNode>(std::move(*name), entry));
+            }
+            return {};
+        }
+
+        auto checked = new_name(element);
+        if (not checked)
+        {
+            return std::unexpected(checked.error());
+        }
+        std::string name = std::move(*checked);
+
+        if (tag == "Node")              { map_.add(make<NodeBase<Node>>(std::move(name), element)); }
+        else if (tag == "Category")     { map_.add(make<CategoryNode>(std::move(name), element)); }
+        else if (tag == "Integer")      { map_.add(make<IntegerNode>(std::move(name), element)); }
+        else if (tag == "IntReg")       { map_.add(make<IntRegNode>(std::move(name), element)); }
+        else if (tag == "MaskedIntReg") { map_.add(make<MaskedIntRegNode>(std::move(name), element)); }
+        else if (tag == "Float")        { map_.add(make<FloatNode>(std::move(name), element)); }
+        else if (tag == "FloatReg")     { map_.add(make<FloatRegNode>(std::move(name), element)); }
+        else if (tag == "Boolean")      { map_.add(make<BooleanNode>(std::move(name), element)); }
+        else if (tag == "Command")      { map_.add(make<CommandNode>(std::move(name), element)); }
+        else if (tag == "String")       { map_.add(make<StringNode>(std::move(name), element)); }
+        else if (tag == "StringReg")    { map_.add(make<StringRegNode>(std::move(name), element)); }
+        else if (tag == "Register")     { map_.add(make<RegisterNode>(std::move(name), element)); }
+        else if (tag == "SwissKnife")    { map_.add(make<SwissKnifeNode<Float, double>>(std::move(name), element)); }
+        else if (tag == "IntSwissKnife") { map_.add(make<SwissKnifeNode<Integer, int64_t>>(std::move(name), element)); }
+        else if (tag == "Converter")     { map_.add(make<ConverterNode<Float, double>>(std::move(name), element)); }
+        else if (tag == "IntConverter")  { map_.add(make<ConverterNode<Integer, int64_t>>(std::move(name), element)); }
+        else if (tag == "Port")
+        {
+            PortNode& port = map_.add(make<PortNode>(std::move(name), element));
+            ports_.emplace(port.name(), &port);
+        }
+        else if (tag == "Enumeration")
+        {
+            EnumerationNode& enumeration = map_.add(make<EnumerationNode>(std::move(name), element));
+            auto created = create_entries(enumeration, element);
+            if (not created)
+            {
+                return created;
+            }
+        }
+        else
+        {
+            return std::unexpected(fail(element, "unsupported node type"));
         }
         return {};
     }
@@ -363,7 +420,44 @@ namespace kickcam::genapi
     {
         std::string_view const tag = child->Name();
         if (tag == "Address")       { return store(reg.offsets.emplace_back().source, integer(child)); }
-        if (tag == "IntSwissKnife") { return store(reg.offsets.emplace_back().source, std::expected<Integer*, std::string>{map_.get<Integer>(name_of(child))}); }
+        if (tag == "IntSwissKnife")
+        {
+            Integer* knife = map_.get<Integer>(name_of(child));
+            references_[current_].push_back(knife);
+            reg.offsets.emplace_back(knife);
+            return true;
+        }
+        if (tag == "pIndex")
+        {
+            RegisterAccess::Index& term = reg.indexes.emplace_back();
+            auto index = store(term.index, int_value(child));
+            if (not index)
+            {
+                return index;
+            }
+            char const* offset = child->Attribute("Offset");
+            if (offset != nullptr)
+            {
+                auto value = to_int(offset);
+                if (not value)
+                {
+                    return std::unexpected(fail(child->Parent()->ToElement(), "invalid Offset '" + std::string{offset} + "' in <pIndex>"));
+                }
+                term.offset = IntValue{*value};
+            }
+            char const* p_offset = child->Attribute("pOffset");
+            if (p_offset != nullptr)
+            {
+                Integer* node = map_.get<Integer>(p_offset);
+                if (node == nullptr)
+                {
+                    return std::unexpected(fail(child->Parent()->ToElement(), "unknown integer '" + std::string{p_offset} + "' in pOffset"));
+                }
+                references_[current_].push_back(node);
+                term.offset = IntValue{node};
+            }
+            return true;
+        }
         if (tag == "pAddress")   { return store(reg.offsets.emplace_back(), int_value(child)); }
         if (tag == "Length")     { return store(reg.length.source, integer(child)); }
         if (tag == "pLength")    { return store(reg.length, int_value(child)); }
@@ -393,48 +487,55 @@ namespace kickcam::genapi
         return fail(child->Parent()->ToElement(), "<" + tag + "> '" + name + "' is not " + std::string{kind});
     }
 
-    std::expected<IntValue, std::string> Parser::int_value(tinyxml2::XMLElement const* child) const
+    std::expected<IntValue, std::string> Parser::int_value(tinyxml2::XMLElement const* child)
     {
         std::string_view const name = text(child);
         Integer* integer = map_.get<Integer>(name);
         if (integer != nullptr)
         {
+            references_[current_].push_back(integer);
             return IntValue{integer};
         }
         Enumeration* enumeration = map_.get<Enumeration>(name);
         if (enumeration != nullptr)
         {
+            references_[current_].push_back(enumeration);
             return IntValue{enumeration};
         }
         Boolean* boolean = map_.get<Boolean>(name);
         if (boolean != nullptr)
         {
+            references_[current_].push_back(boolean);
             return IntValue{boolean};
         }
         Float* real = map_.get<Float>(name);
         if (real != nullptr)
         {
+            references_[current_].push_back(real);
             return IntValue{real};
         }
         return std::unexpected(not_found(child, "an integer, float, enumeration or boolean"));
     }
 
-    std::expected<FloatValue, std::string> Parser::float_value(tinyxml2::XMLElement const* child) const
+    std::expected<FloatValue, std::string> Parser::float_value(tinyxml2::XMLElement const* child)
     {
         std::string_view const name = text(child);
         Float* real = map_.get<Float>(name);
         if (real != nullptr)
         {
+            references_[current_].push_back(real);
             return FloatValue{real};
         }
         Integer* integer = map_.get<Integer>(name);
         if (integer != nullptr)
         {
+            references_[current_].push_back(integer);
             return FloatValue{integer};
         }
         Enumeration* enumeration = map_.get<Enumeration>(name);
         if (enumeration != nullptr)
         {
+            references_[current_].push_back(enumeration);
             return FloatValue{enumeration};
         }
         return std::unexpected(not_found(child, "a float, integer or enumeration"));
@@ -493,8 +594,24 @@ namespace kickcam::genapi
     {
         return each(node.conditions, element, [&](tinyxml2::XMLElement const* child, std::string_view tag) -> std::expected<bool, std::string>
         {
-            if (tag == "Value")  { return store(node.value.source, integer(child)); }
-            if (tag == "pValue") { return store(node.value, int_value(child)); }
+            if (tag == "Value" or tag == "ValueDefault")   { return store(node.value.source, integer(child)); }
+            if (tag == "pValue" or tag == "pValueDefault") { return store(node.value, int_value(child)); }
+            if (tag == "pIndex")     { return store(node.index.emplace(), int_value(child)); }
+            if (tag == "pValueCopy") { return store(node.copies.emplace_back(), int_value(child)); }
+            if (tag == "ValueIndexed" or tag == "pValueIndexed")
+            {
+                auto key = index_key(child);
+                if (not key)
+                {
+                    return std::unexpected(key.error());
+                }
+                IntValue& entry = node.indexed.emplace_back(*key, IntValue{}).second;
+                if (tag == "ValueIndexed")
+                {
+                    return store(entry.source, integer(child));
+                }
+                return store(entry, int_value(child));
+            }
             if (tag == "Min")    { return store(node.minimum.emplace().source, integer(child)); }
             if (tag == "pMin")   { return store(node.minimum.emplace(), int_value(child)); }
             if (tag == "Max")    { return store(node.maximum.emplace().source, integer(child)); }
@@ -509,8 +626,23 @@ namespace kickcam::genapi
     {
         return each(node.conditions, element, [&](tinyxml2::XMLElement const* child, std::string_view tag) -> std::expected<bool, std::string>
         {
-            if (tag == "Value")  { return store(node.value.source, real(child)); }
-            if (tag == "pValue") { return store(node.value, float_value(child)); }
+            if (tag == "Value" or tag == "ValueDefault")   { return store(node.value.source, real(child)); }
+            if (tag == "pValue" or tag == "pValueDefault") { return store(node.value, float_value(child)); }
+            if (tag == "pIndex") { return store(node.index.emplace(), int_value(child)); }
+            if (tag == "ValueIndexed" or tag == "pValueIndexed")
+            {
+                auto key = index_key(child);
+                if (not key)
+                {
+                    return std::unexpected(key.error());
+                }
+                FloatValue& entry = node.indexed.emplace_back(*key, FloatValue{}).second;
+                if (tag == "ValueIndexed")
+                {
+                    return store(entry.source, real(child));
+                }
+                return store(entry, float_value(child));
+            }
             if (tag == "Min")    { return store(node.minimum.emplace().source, real(child)); }
             if (tag == "pMin")   { return store(node.minimum.emplace(), float_value(child)); }
             if (tag == "Max")    { return store(node.maximum.emplace().source, real(child)); }
@@ -591,6 +723,7 @@ namespace kickcam::genapi
                 {
                     return std::unexpected(not_found(child, "a string"));
                 }
+                references_[current_].push_back(node.node);
                 return true;
             }
             return false;
@@ -616,8 +749,9 @@ namespace kickcam::genapi
     {
         std::optional<int64_t> lsb;
         std::optional<int64_t> msb;
-        auto configured = each(node.conditions, element, [&](tinyxml2::XMLElement const* child, std::string_view tag) -> std::expected<bool, std::string>
+        auto handler = [&](tinyxml2::XMLElement const* child, std::string_view tag) -> std::expected<bool, std::string>
         {
+            if (tag == "StructEntry") { return true; }
             if (tag == "Sign")    { return store(node.is_signed, choice(child, "Signed", "Unsigned")); }
             if (tag == "LSB")     { return store(lsb, integer(child)); }
             if (tag == "MSB")     { return store(msb, integer(child)); }
@@ -629,7 +763,17 @@ namespace kickcam::genapi
                 return stored;
             }
             return register_element(node.reg, child);
-        });
+        };
+        // A StructEntry reads the elements its StructReg shares with the other entries first.
+        if (std::string_view{element->Name()} == "StructEntry")
+        {
+            auto shared = each(node.conditions, element->Parent()->ToElement(), handler);
+            if (not shared)
+            {
+                return shared;
+            }
+        }
+        auto configured = each(node.conditions, element, handler);
         if (not configured)
         {
             return configured;
@@ -706,7 +850,7 @@ namespace kickcam::genapi
 
     template<typename T>
     std::expected<bool, std::string> Parser::variable_element(Variables& variables, std::vector<std::string_view>& expressions,
-                                                              tinyxml2::XMLElement const* child) const
+                                                              tinyxml2::XMLElement const* child)
     {
         std::string_view const tag = child->Name();
         Variables::Variable variable{.name = std::string{name_of(child)}};
@@ -751,7 +895,7 @@ namespace kickcam::genapi
     }
 
     // The Name may end with .Value, .Min, .Max, .Inc, or .Entry.<entry> to read an enumeration entry's value.
-    std::expected<void, std::string> Parser::resolve_variable(Variables::Variable& variable, tinyxml2::XMLElement const* child) const
+    std::expected<void, std::string> Parser::resolve_variable(Variables::Variable& variable, tinyxml2::XMLElement const* child)
     {
         std::string_view suffix;
         std::size_t const dot = variable.name.find('.');
@@ -906,5 +1050,59 @@ namespace kickcam::genapi
             return std::unexpected(stored.error());
         }
         return store(node.from, formula(node.variables, element, "FormulaFrom", from)).transform([](bool) {});
+    }
+
+    std::expected<void, std::string> Parser::check_cycles() const
+    {
+        enum class Mark
+        {
+            Visiting,
+            Done,
+        };
+        std::unordered_map<Node const*, Mark> marks;
+        std::vector<Node const*> path;
+        std::function<std::optional<std::string>(Node const*)> visit = [&](Node const* node) -> std::optional<std::string>
+        {
+            auto mark = marks.find(node);
+            if (mark != marks.end())
+            {
+                if (mark->second == Mark::Done)
+                {
+                    return std::nullopt;
+                }
+                std::string cycle;
+                for (auto it = std::ranges::find(path, node); it != path.end(); ++it)
+                {
+                    cycle += (*it)->name() + " -> ";
+                }
+                return cycle + node->name();
+            }
+            marks.emplace(node, Mark::Visiting);
+            path.push_back(node);
+            auto references = references_.find(node);
+            if (references != references_.end())
+            {
+                for (Node const* target : references->second)
+                {
+                    auto cycle = visit(target);
+                    if (cycle)
+                    {
+                        return cycle;
+                    }
+                }
+            }
+            path.pop_back();
+            marks[node] = Mark::Done;
+            return std::nullopt;
+        };
+        for (Node const* node : order_)
+        {
+            auto cycle = visit(node);
+            if (cycle)
+            {
+                return std::unexpected("cycle in references: " + *cycle);
+            }
+        }
+        return {};
     }
 }
