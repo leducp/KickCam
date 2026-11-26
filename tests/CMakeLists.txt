@@ -7,6 +7,7 @@ add_executable(kickcam_unit
     unit/genapi/Nodes-t.cc
     unit/genapi/Parser-t.cc
     unit/genapi/RegisterNodes-t.cc
+    unit/genapi/SwissKnifeNodes-t.cc
 )
 target_link_libraries(kickcam_unit PRIVATE kickcam GTest::gmock_main)
 target_include_directories(kickcam_unit PRIVATE ${PROJECT_SOURCE_DIR}/src)

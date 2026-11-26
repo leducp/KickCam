@@ -50,7 +50,9 @@ add_library(kickcam STATIC
     src/genapi/Number.cc
     src/genapi/Parser.cc
     src/genapi/RegisterNodes.cc
+    src/genapi/SwissKnifeNodes.cc
     src/genapi/Value.cc
+    src/genapi/Variables.cc
 )
 
 include(GNUInstallDirs)

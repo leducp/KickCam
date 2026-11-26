@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <array>
 
+#include <type_traits>
+
 #include "genapi/Number.h"
 #include "genapi/Parser.h"
 
@@ -9,12 +11,12 @@ namespace kickcam::genapi
     namespace
     {
         // Elements that change nothing without caching, polling, events or a user interface.
-        constexpr std::array<std::string_view, 26> IGNORED
+        constexpr std::array<std::string_view, 27> IGNORED
         {
             "Extension", "ToolTip", "Description", "DisplayName", "Visibility", "DocuURL", "IsDeprecated",
             "EventID", "pBlockPolling", "pError", "pAlias", "pCastAlias", "pInvalidator", "pSelected",
             "Streamable", "Unit", "Representation", "DisplayNotation", "DisplayPrecision", "Cachable",
-            "PollingTime", "ValidValueSet", "IsSelfClearing", "NumericValue", "Symbolic", "CacheChunkData",
+            "PollingTime", "ValidValueSet", "IsSelfClearing", "NumericValue", "Symbolic", "CacheChunkData", "IsLinear",
         };
 
         std::string_view name_of(tinyxml2::XMLElement const* element)
@@ -240,15 +242,12 @@ namespace kickcam::genapi
                 continue;
             }
 
-            std::string name{name_of(element)};
-            if (name.empty())
+            auto checked = new_name(element);
+            if (not checked)
             {
-                return std::unexpected(fail(element, "no Name attribute"));
+                return std::unexpected(checked.error());
             }
-            if (map_.get(name) != nullptr)
-            {
-                return std::unexpected(fail(element, "duplicate name"));
-            }
+            std::string name = std::move(*checked);
 
             if (tag == "Node")              { map_.add(make<NodeBase<Node>>(std::move(name), element)); }
             else if (tag == "Category")     { map_.add(make<CategoryNode>(std::move(name), element)); }
@@ -262,6 +261,10 @@ namespace kickcam::genapi
             else if (tag == "String")       { map_.add(make<StringNode>(std::move(name), element)); }
             else if (tag == "StringReg")    { map_.add(make<StringRegNode>(std::move(name), element)); }
             else if (tag == "Register")     { map_.add(make<RegisterNode>(std::move(name), element)); }
+            else if (tag == "SwissKnife")    { map_.add(make<SwissKnifeNode<Float, double>>(std::move(name), element)); }
+            else if (tag == "IntSwissKnife") { map_.add(make<SwissKnifeNode<Integer, int64_t>>(std::move(name), element)); }
+            else if (tag == "Converter")     { map_.add(make<ConverterNode<Float, double>>(std::move(name), element)); }
+            else if (tag == "IntConverter")  { map_.add(make<ConverterNode<Integer, int64_t>>(std::move(name), element)); }
             else if (tag == "Port")
             {
                 PortNode& port = map_.add(make<PortNode>(std::move(name), element));
@@ -280,8 +283,33 @@ namespace kickcam::genapi
             {
                 return std::unexpected(fail(element, "unsupported node type"));
             }
+
+            // An IntSwissKnife inside a register adds to its address.
+            for (auto child = element->FirstChildElement("IntSwissKnife"); child != nullptr; child = child->NextSiblingElement("IntSwissKnife"))
+            {
+                auto knife = new_name(child);
+                if (not knife)
+                {
+                    return std::unexpected(knife.error());
+                }
+                map_.add(make<SwissKnifeNode<Integer, int64_t>>(std::move(*knife), child));
+            }
         }
         return {};
+    }
+
+    std::expected<std::string, std::string> Parser::new_name(tinyxml2::XMLElement const* element) const
+    {
+        std::string name{name_of(element)};
+        if (name.empty())
+        {
+            return std::unexpected(fail(element, "no Name attribute"));
+        }
+        if (map_.get(name) != nullptr)
+        {
+            return std::unexpected(fail(element, "duplicate name"));
+        }
+        return name;
     }
 
     std::expected<void, std::string> Parser::create_entries(EnumerationNode& enumeration, tinyxml2::XMLElement const* element)
@@ -334,7 +362,8 @@ namespace kickcam::genapi
     std::expected<bool, std::string> Parser::register_element(RegisterAccess& reg, tinyxml2::XMLElement const* child)
     {
         std::string_view const tag = child->Name();
-        if (tag == "Address")    { return store(reg.offsets.emplace_back().source, integer(child)); }
+        if (tag == "Address")       { return store(reg.offsets.emplace_back().source, integer(child)); }
+        if (tag == "IntSwissKnife") { return store(reg.offsets.emplace_back().source, std::expected<Integer*, std::string>{map_.get<Integer>(name_of(child))}); }
         if (tag == "pAddress")   { return store(reg.offsets.emplace_back(), int_value(child)); }
         if (tag == "Length")     { return store(reg.length.source, integer(child)); }
         if (tag == "pLength")    { return store(reg.length, int_value(child)); }
@@ -673,5 +702,209 @@ namespace kickcam::genapi
             return configured;
         }
         return check_register(node.reg, element);
+    }
+
+    template<typename T>
+    std::expected<bool, std::string> Parser::variable_element(Variables& variables, std::vector<std::string_view>& expressions,
+                                                              tinyxml2::XMLElement const* child) const
+    {
+        std::string_view const tag = child->Name();
+        Variables::Variable variable{.name = std::string{name_of(child)}};
+        if (tag == "Expression")
+        {
+            variable.source = Variables::Expression{expressions.size()};
+            expressions.push_back(raw(child));
+        }
+        else if (tag == "Constant")
+        {
+            if constexpr (std::is_integral_v<T>)
+            {
+                auto stored = store(variable.source, integer(child));
+                if (not stored)
+                {
+                    return stored;
+                }
+            }
+            else
+            {
+                auto stored = store(variable.source, real(child));
+                if (not stored)
+                {
+                    return stored;
+                }
+            }
+        }
+        else if (tag == "pVariable")
+        {
+            auto resolved = resolve_variable(variable, child);
+            if (not resolved)
+            {
+                return std::unexpected(resolved.error());
+            }
+        }
+        else
+        {
+            return false;
+        }
+        variables.variables.push_back(std::move(variable));
+        return true;
+    }
+
+    // The Name may end with .Value, .Min, .Max, .Inc, or .Entry.<entry> to read an enumeration entry's value.
+    std::expected<void, std::string> Parser::resolve_variable(Variables::Variable& variable, tinyxml2::XMLElement const* child) const
+    {
+        std::string_view suffix;
+        std::size_t const dot = variable.name.find('.');
+        if (dot != std::string::npos)
+        {
+            suffix = std::string_view{variable.name}.substr(dot + 1);
+        }
+
+        if (suffix.starts_with("Entry."))
+        {
+            Enumeration* enumeration = map_.get<Enumeration>(text(child));
+            if (enumeration == nullptr)
+            {
+                return std::unexpected(not_found(child, "an enumeration"));
+            }
+            std::string_view const entry_name = suffix.substr(6);
+            auto entries = enumeration->entries();
+            auto entry = std::ranges::find(entries, entry_name, &EnumEntry::name);
+            if (entry == entries.end())
+            {
+                return std::unexpected(fail(child->Parent()->ToElement(), "unknown entry '" + std::string{entry_name} + "' in <pVariable>"));
+            }
+            variable.source = *entry;
+            return {};
+        }
+
+        auto target = int_value(child);
+        if (not target)
+        {
+            return std::unexpected(target.error());
+        }
+        std::visit([&](auto source) { variable.source = source; }, target->source);
+        if (suffix == "Min")      { variable.property = Variables::Property::Min; }
+        else if (suffix == "Max") { variable.property = Variables::Property::Max; }
+        else if (suffix == "Inc") { variable.property = Variables::Property::Inc; }
+        else if (not suffix.empty() and suffix != "Value")
+        {
+            return std::unexpected(fail(child->Parent()->ToElement(), "unsupported <pVariable> '" + variable.name + "'"));
+        }
+        bool const numeric = std::holds_alternative<Integer*>(variable.source) or std::holds_alternative<Float*>(variable.source);
+        if (variable.property != Variables::Property::Value and not numeric)
+        {
+            return std::unexpected(fail(child->Parent()->ToElement(), "<pVariable> '" + variable.name + "' needs an integer or a float"));
+        }
+        return {};
+    }
+
+    std::expected<void, std::string> Parser::finish(Variables& variables, std::span<std::string_view const> expressions,
+                                                    tinyxml2::XMLElement const* element) const
+    {
+        for (std::string_view text : expressions)
+        {
+            auto parsed = formula(variables, element, "Expression", text);
+            if (not parsed)
+            {
+                return std::unexpected(parsed.error());
+            }
+            variables.expressions.push_back(std::move(*parsed));
+        }
+        return {};
+    }
+
+    std::expected<Formula, std::string> Parser::formula(Variables const& variables, tinyxml2::XMLElement const* element,
+                                                        std::string_view tag, std::optional<std::string_view> text) const
+    {
+        if (not text)
+        {
+            return std::unexpected(fail(element, "no <" + std::string{tag} + ">"));
+        }
+        auto parsed = Formula::parse(*text, [&](std::string_view name) { return variables.find(name); });
+        if (not parsed)
+        {
+            return std::unexpected(fail(element, "<" + std::string{tag} + ">: " + parsed.error()));
+        }
+        return parsed;
+    }
+
+    template<typename Interface, typename T>
+    std::expected<void, std::string> Parser::configure(SwissKnifeNode<Interface, T>& node, tinyxml2::XMLElement const* element)
+    {
+        std::vector<std::string_view> expressions;
+        std::optional<std::string_view> text;
+        auto configured = each(node.conditions, element, [&](tinyxml2::XMLElement const* child, std::string_view tag) -> std::expected<bool, std::string>
+        {
+            if (tag == "Formula")
+            {
+                text = raw(child);
+                return true;
+            }
+            return variable_element<T>(node.variables, expressions, child);
+        });
+        if (not configured)
+        {
+            return configured;
+        }
+        auto finished = finish(node.variables, expressions, element);
+        if (not finished)
+        {
+            return finished;
+        }
+        return store(node.formula, formula(node.variables, element, "Formula", text)).transform([](bool) {});
+    }
+
+    template<typename Interface, typename T>
+    std::expected<void, std::string> Parser::configure(ConverterNode<Interface, T>& node, tinyxml2::XMLElement const* element)
+    {
+        std::vector<std::string_view> expressions;
+        std::optional<std::string_view> to;
+        std::optional<std::string_view> from;
+        auto configured = each(node.conditions, element, [&](tinyxml2::XMLElement const* child, std::string_view tag) -> std::expected<bool, std::string>
+        {
+            if (tag == "FormulaTo")
+            {
+                to = raw(child);
+                return true;
+            }
+            if (tag == "FormulaFrom")
+            {
+                from = raw(child);
+                return true;
+            }
+            if (tag == "Slope")
+            {
+                node.varying = text(child) == "Varying";
+                return true;
+            }
+            if (tag == "pValue")
+            {
+                if constexpr (std::is_integral_v<T>)
+                {
+                    return store(node.value, int_value(child));
+                }
+                else
+                {
+                    return store(node.value, float_value(child));
+                }
+            }
+            return variable_element<T>(node.variables, expressions, child);
+        });
+        if (not configured)
+        {
+            return configured;
+        }
+        auto finished = finish(node.variables, expressions, element);
+        if (not finished)
+        {
+            return finished;
+        }
+        auto stored = store(node.to, formula(node.variables, element, "FormulaTo", to));
+        if (not stored)
+        {
+            return std::unexpected(stored.error());
+        }
+        return store(node.from, formula(node.variables, element, "FormulaFrom", from)).transform([](bool) {});
     }
 }

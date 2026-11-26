@@ -3,12 +3,16 @@
 
 #include <concepts>
 #include <functional>
+#include <optional>
+#include <span>
 #include <unordered_map>
+#include <vector>
 
 #include <tinyxml2.h>
 
 #include "kickcam/genapi/NodeMap.h"
 #include "genapi/RegisterNodes.h"
+#include "genapi/SwissKnifeNodes.h"
 
 namespace kickcam::genapi
 {
@@ -23,6 +27,9 @@ namespace kickcam::genapi
         // Creates every node before any is configured: a reference can name a node defined later.
         std::expected<void, std::string> create(tinyxml2::XMLElement const* parent);
         std::expected<void, std::string> create_entries(EnumerationNode& enumeration, tinyxml2::XMLElement const* element);
+
+        // Fails when the element has no Name, or a name already in the map.
+        std::expected<std::string, std::string> new_name(tinyxml2::XMLElement const* element) const;
 
         // Creates a node and queues its configuration.
         template<typename T>
@@ -46,6 +53,25 @@ namespace kickcam::genapi
         template<typename T>
         requires std::same_as<T, StringRegNode> or std::same_as<T, RegisterNode>
         std::expected<void, std::string> configure(T& node, tinyxml2::XMLElement const* element);
+
+        template<typename Interface, typename T>
+        std::expected<void, std::string> configure(SwissKnifeNode<Interface, T>& node, tinyxml2::XMLElement const* element);
+        template<typename Interface, typename T>
+        std::expected<void, std::string> configure(ConverterNode<Interface, T>& node, tinyxml2::XMLElement const* element);
+
+        // pVariable, Constant and Expression; returns false for another child. T is the formula's type.
+        template<typename T>
+        std::expected<bool, std::string> variable_element(Variables& variables, std::vector<std::string_view>& expressions,
+                                                          tinyxml2::XMLElement const* child) const;
+        std::expected<void, std::string> resolve_variable(Variables::Variable& variable, tinyxml2::XMLElement const* child) const;
+
+        // Parses the Expression elements once every name is known.
+        std::expected<void, std::string> finish(Variables& variables, std::span<std::string_view const> expressions,
+                                                tinyxml2::XMLElement const* element) const;
+
+        // The error names the element and the tag; a missing text gives "no <tag>".
+        std::expected<Formula, std::string> formula(Variables const& variables, tinyxml2::XMLElement const* element,
+                                                    std::string_view tag, std::optional<std::string_view> text) const;
 
         // Runs handler on every child element. Children it does not handle must be common to all nodes.
         template<typename Handler>
