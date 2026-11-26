@@ -1,27 +1,8 @@
-#include <cmath>
-#include <limits>
-
+#include "genapi/Number.h"
 #include "genapi/Value.h"
 
 namespace kickcam::genapi
 {
-    int64_t saturate(double value)
-    {
-        if (std::isnan(value))
-        {
-            return 0;
-        }
-        if (value >= 0x1p63)
-        {
-            return std::numeric_limits<int64_t>::max();
-        }
-        if (value < -0x1p63)
-        {
-            return std::numeric_limits<int64_t>::min();
-        }
-        return static_cast<int64_t>(value);
-    }
-
     std::expected<int64_t, std::error_code> IntValue::get() const
     {
         return std::visit<std::expected<int64_t, std::error_code>>(Overloaded

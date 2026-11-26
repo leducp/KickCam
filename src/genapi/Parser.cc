@@ -1,9 +1,7 @@
 #include <algorithm>
 #include <array>
-#include <charconv>
-#include <locale>
-#include <sstream>
 
+#include "genapi/Number.h"
 #include "genapi/Parser.h"
 
 namespace kickcam::genapi
@@ -74,41 +72,24 @@ namespace kickcam::genapi
             return fail(child->Parent()->ToElement(), problem);
         }
 
-        // HexOrDecimal: "0x" followed by hex digits, or a decimal with an optional minus sign.
         std::expected<int64_t, std::string> integer(tinyxml2::XMLElement const* child)
         {
-            std::string_view const value = text(child);
-            char const* const end = value.data() + value.size();
-            std::from_chars_result result{};
-            int64_t number = 0;
-            if (value.starts_with("0x") or value.starts_with("0X"))
-            {
-                uint64_t raw = 0;
-                result = std::from_chars(value.data() + 2, end, raw, 16);
-                number = static_cast<int64_t>(raw);
-            }
-            else
-            {
-                result = std::from_chars(value.data(), end, number);
-            }
-            if (value.empty() or result.ec != std::errc{} or result.ptr != end)
+            auto number = to_int(text(child));
+            if (not number)
             {
                 return std::unexpected(invalid(child, "integer"));
             }
-            return number;
+            return *number;
         }
 
         std::expected<double, std::string> real(tinyxml2::XMLElement const* child)
         {
-            std::istringstream stream{std::string{text(child)}};
-            stream.imbue(std::locale::classic());
-            double number = 0.0;
-            stream >> number;
-            if (stream.fail() or not stream.eof())
+            auto number = to_double(text(child));
+            if (not number)
             {
                 return std::unexpected(invalid(child, "float"));
             }
-            return number;
+            return *number;
         }
 
         std::expected<bool, std::string> boolean(tinyxml2::XMLElement const* child)

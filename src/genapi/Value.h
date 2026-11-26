@@ -14,9 +14,6 @@ namespace kickcam::genapi
         using Lambdas::operator()...;
     };
 
-    // Clamps to the int64 range; NaN gives 0.
-    int64_t saturate(double value);
-
     // A constant, or the value of an Integer, Enumeration, Boolean or Float node.
     struct IntValue
     {
