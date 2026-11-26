@@ -12,7 +12,7 @@ class KickcamRecipe(ConanFile):
     name = "kickcam"
     license = "CeCILL-C"
     url = "https://github.com/leducp/KickCam"
-    description = "USB3 Vision camera library driven by the camera's GenICam XML"
+    description = "Lean GenICam camera library: USB3 Vision first, frames into caller-owned buffers"
     topics = ("camera", "usb3-vision", "genicam", "machine-vision")
     package_type = "library"
     settings = "os", "compiler", "build_type", "arch"

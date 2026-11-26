@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "kickcam"
 version = "0.0.0"
-description = "USB3 Vision camera library driven by the camera's GenICam XML."
+description = "Lean GenICam camera library: USB3 Vision first, frames into caller-owned buffers."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = { text = "CeCILL-C" }
 maintainers = [

@@ -1,6 +1,6 @@
 # KickCam
 
-A lean C++ library to configure and stream from USB3 Vision cameras. It reads the camera's
+A lean C++ library to configure and stream from GenICam cameras, USB3 Vision first. It reads the camera's
 GenICam XML to find its features, and writes frames straight into buffers the caller owns.
 
 Status: early development. See [docs/PLAN.md](docs/PLAN.md) for the scope and the roadmap.

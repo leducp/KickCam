@@ -2,7 +2,8 @@
 
 Project-wide directives for any LLM working in this repository. Read this before proposing
 changes. These override generic defaults. KickCam is a lean C++ library to configure and stream
-from USB3 Vision cameras, reading the camera's GenICam XML. Scope and roadmap: `docs/PLAN.md`.
+from GenICam cameras (USB3 Vision first, GigE Vision next), reading the camera's GenICam XML.
+Scope and roadmap: `docs/PLAN.md`.
 
 ## 1. Build
 

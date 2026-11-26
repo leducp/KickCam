@@ -1,8 +1,12 @@
 # KickCam plan
 
-KickCam is a lean C++ library to configure and stream from USB3 Vision cameras. It reads the
-camera's GenICam XML to find its features, like aravis does, but with a smaller scope, no glib,
-and frames written straight into buffers the caller owns.
+KickCam is a lean C++ library to configure and stream from GenICam cameras. It reads the camera's
+GenICam XML to find its features, like aravis does, but with no glib and frames written straight
+into buffers the caller owns.
+
+The goal is every GenICam transport: USB3 Vision, GigE Vision, and the frame grabber standards
+(CoaXPress, Camera Link) through GenTL. We get there one transport at a time. The first milestone,
+v1, is USB3 Vision with a GenApi subset.
 
 First user: sentry's camera HAL, to replace `AravisCamera` on marvin_f90c (Hikrobot MV-CB060 ego
 camera, two MV-CB013 wrist cameras, on a Jetson).
@@ -23,14 +27,22 @@ camera, two MV-CB013 wrist cameras, on a Jetson).
   read features, grab into numpy) is scoped after phase 3.
 - Linux (x86_64, aarch64) and macOS.
 
-### Not in v1
+### After v1
 
-- GigE Vision. The layering keeps room for a `gev` module later (see Architecture).
-- The event channel, chunk data, GenTL producer/consumer interfaces.
-- Full GenApi: caching modes, invalidators, polling, every node type.
-- Windows: libusb needs the WinUSB driver bound to each camera by hand.
-- Claiming GenICam compliance. The name GenICam is an EMVA trademark; the README says "reads
-  GenICam XML", nothing more.
+In this order (see Roadmap after v1):
+
+1. GigE Vision.
+2. Full GenApi: caching, invalidators, polling, every node type.
+3. Chunk data and events, on both transports.
+4. A GenTL consumer, for CoaXPress and Camera Link cameras behind a frame grabber.
+
+### Not planned
+
+- A GenTL producer (a `.cti` that exposes KickCam to third-party software).
+- Windows for USB3 Vision: libusb needs the WinUSB driver bound to each camera by hand. GigE
+  Vision only needs sockets, so Windows can come with it.
+- Claiming GenICam compliance before full GenApi. The name GenICam is an EMVA trademark; until
+  then the README says "reads GenICam XML", nothing more.
 
 ## Architecture
 
@@ -57,7 +69,18 @@ One library, `kickcam`, in two parts:
 
 `genapi` never includes from `u3v`.
 
-A later GigE Vision module would be a second `Port` and a second stream. `genapi` does not change.
+Rules that keep GigE Vision and GenTL from forcing a rewrite:
+
+- `Frame`, `DeviceInfo` and the buffer model live in `kickcam::`, not in `kickcam::u3v`. Every
+  transport fills the same `Frame` and takes the same caller-owned buffers.
+- `u3v::Stream` has the shape every later stream follows: queue a buffer, wait for a frame,
+  start, stop. A common `kickcam::Stream` interface is extracted when the second transport lands,
+  not before.
+- `genapi` reads and writes only through `Port`. Every node read goes through one path, so the
+  cache that full GenApi needs (GigE register access costs a network round trip) has one place
+  to go.
+- The XML location is parsed from the GenICam URL form (`Local:<file>;<address>;<length>`),
+  which U3V manifests and GigE Vision URL registers share.
 
 ### API sketch
 
@@ -207,6 +230,42 @@ KickCam/
 
 Total: 4 to 6 weeks for one person.
 
+## Roadmap after v1
+
+Rough sizes, one person, to be refined when v1 is done.
+
+### 6. GigE Vision (4-8 weeks)
+
+- Module `kickcam::gev` (`include/kickcam/gev`, `src/gev`), over plain UDP sockets.
+- GVCP: discovery by broadcast, ForceIP, `READREG` / `WRITEREG` / `READMEM` / `WRITEMEM`,
+  `PENDING_ACK`, control privilege and heartbeat. Implements `Port`.
+- XML from the first URL register: `Local:` on the device, `File:` and `http:` on request.
+- GVSP: leader, payload and trailer packets, 16-bit and extended 64-bit block ids, out-of-order
+  packets, packet resend requests, stream channel setup (destination, packet size test for jumbo
+  frames), multicast.
+- Socket path: large receive buffers and `recvmmsg` first. `TPACKET_V3` or AF_XDP only if a
+  10 GigE camera needs it, reusing what KickCAT learned on raw sockets.
+- PTP device timestamps and action commands, to trigger several cameras at the same instant.
+- Fake device over loopback UDP, with packet loss, reordering and duplicates injected.
+
+### 7. Full GenApi (1-2 months)
+
+- Every node type of the standard, caching modes, invalidators, polling, access modes.
+- Checked against the private XML collection from every vendor we can get.
+- From here the README may claim GenICam compliance.
+
+### 8. Chunk data and events
+
+- Chunk data parsed from the U3V trailer and the GVSP trailer, exposed through the node map like
+  any feature.
+- Events from the U3V event endpoint and the GigE Vision message channel.
+
+### 9. GenTL consumer (2-3 weeks)
+
+- Load a vendor's GenTL producer (`.cti`) and drive its interfaces, devices and data streams,
+  for CoaXPress and Camera Link cameras behind a frame grabber.
+- The producer supplies the `Port` and the stream, so `genapi` and `Frame` do not change.
+
 ## Risks
 
 - **Stream sizing.** Wrong SIRM transfer sizes fail on some cameras and hosts only. Check them on
@@ -218,7 +277,10 @@ Total: 4 to 6 weeks for one person.
   Tests use synthetic XMLs that reproduce the patterns found in real files. The full check against
   real XMLs runs locally or from a private location.
 - **GenApi long tail.** A new camera may use a node type or construct outside the subset. The
-  loader fails loudly, and the fix is to add that construct with a test.
+  loader fails loudly, and the fix is to add that construct with a test. Full GenApi (phase 7)
+  ends this risk only as far as the XML collection reaches.
+- **GigE Vision packet rates.** A 10 GigE camera sends about a million packets per second. Plain
+  sockets may not keep up on a Jetson; the socket path is measured first, in phase 6.
 
 ## Open questions
 
