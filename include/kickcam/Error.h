@@ -13,8 +13,9 @@ namespace kickcam
         locked,
         not_readable,
         not_writable,
-        out_of_range,   // outside min/max, off the increment grid, or too long for the register
-        invalid_value,  // a name or a device value that matches no enumeration entry or boolean state
+        out_of_range,     // outside min/max, off the increment grid, or too long for the register
+        invalid_value,    // a name or a device value that matches no enumeration entry or boolean state
+        division_by_zero, // in a formula, with the values the device holds
     };
 
     std::error_category const& error_category();

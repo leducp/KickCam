@@ -43,9 +43,11 @@ find_package(tinyxml2 REQUIRED CONFIG)
 
 add_library(kickcam STATIC
     src/Error.cc
+    src/genapi/Formula.cc
     src/genapi/NodeBase.cc
     src/genapi/NodeMap.cc
     src/genapi/Nodes.cc
+    src/genapi/Number.cc
     src/genapi/Parser.cc
     src/genapi/RegisterNodes.cc
     src/genapi/Value.cc

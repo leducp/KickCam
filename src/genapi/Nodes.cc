@@ -2,6 +2,7 @@
 
 #include "kickcam/Error.h"
 #include "genapi/Nodes.h"
+#include "genapi/Number.h"
 
 namespace kickcam::genapi
 {

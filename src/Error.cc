@@ -18,13 +18,14 @@ namespace kickcam
             {
                 switch (static_cast<Errc>(value))
                 {
-                    case Errc::not_implemented: { return "feature not implemented"; }
-                    case Errc::not_available:   { return "feature not available"; }
-                    case Errc::locked:          { return "feature locked"; }
-                    case Errc::not_readable:    { return "feature not readable"; }
-                    case Errc::not_writable:    { return "feature not writable"; }
-                    case Errc::out_of_range:    { return "value out of range"; }
-                    case Errc::invalid_value:   { return "invalid value"; }
+                    case Errc::not_implemented:  { return "feature not implemented"; }
+                    case Errc::not_available:    { return "feature not available"; }
+                    case Errc::locked:           { return "feature locked"; }
+                    case Errc::not_readable:     { return "feature not readable"; }
+                    case Errc::not_writable:     { return "feature not writable"; }
+                    case Errc::out_of_range:     { return "value out of range"; }
+                    case Errc::invalid_value:    { return "invalid value"; }
+                    case Errc::division_by_zero: { return "division by zero in a formula"; }
                 }
                 return "unknown kickcam error";
             }
