@@ -35,6 +35,7 @@ In this order (see Roadmap after v1):
 2. Full GenApi: caching, invalidators, polling, every node type.
 3. Chunk data and events, on both transports.
 4. A GenTL consumer, for CoaXPress and Camera Link cameras behind a frame grabber.
+5. Backends beyond GenICam: V4L2 (UVC, MIPI), RealSense, libcamera or Argus.
 
 ### Not planned
 
@@ -265,6 +266,18 @@ Rough sizes, one person, to be refined when v1 is done.
 - Load a vendor's GenTL producer (`.cti`) and drive its interfaces, devices and data streams,
   for CoaXPress and Camera Link cameras behind a frame grabber.
 - The producer supplies the `Port` and the stream, so `genapi` and `Frame` do not change.
+
+### 10. Beyond GenICam
+
+GenICam is the model every backend maps into, not one backend among others. Its standard feature
+names (SFNC) already cover multi-source, 3D and depth cameras (GenDC), so one API (`NodeMap`,
+`Stream`, `Frame`) serves every camera, with no lowest-common-denominator layer.
+
+- A non-GenICam backend (V4L2 for UVC and MIPI, RealSense, libcamera or Argus) generates its XML
+  with SFNC names, and implements a virtual `Port` whose registers map to its own controls.
+- Its stream fills the same `Frame` and takes the same caller-owned buffers.
+- Until a user outside sentry needs it, sentry's HAL keeps its own multi-backend layer
+  (`AbstractCamera` with the UVC, RealSense and Bayer cameras) and KickCam is one backend of it.
 
 ## Risks
 
