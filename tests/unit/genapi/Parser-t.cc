@@ -50,9 +50,9 @@ TEST(Parser, NamesUnsupportedNodeTypes)
 
 TEST(Parser, NamesUnsupportedElements)
 {
-    EXPECT_EQ(parse_error(R"(<Integer Name="Width"><pIndex>Index</pIndex><ValueIndexed Index="0">1</ValueIndexed><ValueDefault>0</ValueDefault></Integer>
-                             <Integer Name="Index"><Value>0</Value></Integer>)"),
-              "Integer 'Width': unsupported element <pIndex>");
+    EXPECT_EQ(parse_error(R"(<Integer Name="Width"><Value>1</Value><pFeature>Height</pFeature></Integer>
+                             <Integer Name="Height"><Value>1</Value></Integer>)"),
+              "Integer 'Width': unsupported element <pFeature>");
 }
 
 TEST(Parser, NamesUnknownReferences)
@@ -181,6 +181,38 @@ TEST(Parser, ChecksFormulaNodes)
     EXPECT_EQ(parse_error(R"(<IntSwissKnife Name="Gain"><pVariable Name="W.AccessMode">Width</pVariable><Formula>1</Formula></IntSwissKnife>
                              <Integer Name="Width"><Value>1</Value></Integer>)"),
               "IntSwissKnife 'Gain': unsupported <pVariable> 'W.AccessMode'");
+}
+
+TEST(Parser, ChecksIndexesAndStructs)
+{
+    EXPECT_EQ(parse_error(R"(<Integer Name="Gain"><pIndex>Selector</pIndex><ValueIndexed Index="x">1</ValueIndexed><ValueDefault>0</ValueDefault></Integer>
+                             <Integer Name="Selector"><Value>0</Value></Integer>)"),
+              "Integer 'Gain': invalid Index 'x' in <ValueIndexed>");
+    EXPECT_EQ(parse_error(R"(<IntReg Name="Gain"><Address>0</Address><pIndex pOffset="Nope">Selector</pIndex><Length>1</Length><pPort>Device</pPort></IntReg>
+                             <Integer Name="Selector"><Value>0</Value></Integer>)"),
+              "IntReg 'Gain': unknown integer 'Nope' in pOffset");
+    EXPECT_EQ(parse_error(R"(<StructReg Comment="Flags"><Address>0</Address><Length>1</Length><pPort>Device</pPort><Shape>Round</Shape>
+                                 <StructEntry Name="Enable"><Bit>0</Bit></StructEntry></StructReg>)"),
+              "StructReg 'Flags': unsupported element <Shape>");
+    EXPECT_EQ(parse_error(R"(<StructReg Comment="Flags"><Address>0</Address><Length>1</Length><pPort>Device</pPort>
+                                 <StructEntry><Bit>0</Bit></StructEntry></StructReg>)"),
+              "StructEntry '': no Name attribute");
+}
+
+TEST(Parser, RejectsCyclesOfReferences)
+{
+    EXPECT_EQ(parse_error(R"(<Integer Name="A"><pValue>B</pValue></Integer>
+                             <Integer Name="B"><pValue>A</pValue></Integer>)"),
+              "cycle in references: A -> B -> A");
+    EXPECT_EQ(parse_error(R"(<Integer Name="A"><pIsAvailable>A</pIsAvailable><Value>1</Value></Integer>)"),
+              "cycle in references: A -> A");
+    EXPECT_EQ(parse_error(R"(<IntSwissKnife Name="K"><pVariable Name="X">I</pVariable><Formula>X</Formula></IntSwissKnife>
+                             <Integer Name="I"><pValue>K</pValue></Integer>)"),
+              "cycle in references: K -> I -> K");
+    EXPECT_EQ(parse_error(R"(<Integer Name="A"><pValue>B</pValue><pMax>C</pMax></Integer>
+                             <Integer Name="B"><pValue>C</pValue></Integer>
+                             <Integer Name="C"><Value>1</Value></Integer>)"),
+              "parsed");
 }
 
 TEST(Parser, RejectsSwappedPorts)

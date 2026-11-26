@@ -3,6 +3,8 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
+#include <vector>
 
 #include "kickcam/genapi/Port.h"
 #include "genapi/NodeBase.h"
@@ -19,7 +21,10 @@ namespace kickcam::genapi
         std::expected<int64_t, std::error_code> max() const override;
         std::expected<int64_t, std::error_code> inc() const override;
 
-        IntValue value;
+        IntValue value; // the default too, when pIndex selects no ValueIndexed
+        std::optional<IntValue> index;
+        std::vector<std::pair<int64_t, IntValue>> indexed;
+        std::vector<IntValue> copies;
         std::optional<IntValue> minimum;
         std::optional<IntValue> maximum;
         std::optional<IntValue> increment;
@@ -39,7 +44,9 @@ namespace kickcam::genapi
         std::expected<double, std::error_code> max() const override;
         std::expected<std::optional<double>, std::error_code> inc() const override;
 
-        FloatValue value;
+        FloatValue value; // the default too, when pIndex selects no ValueIndexed
+        std::optional<IntValue> index;
+        std::vector<std::pair<int64_t, FloatValue>> indexed;
         std::optional<FloatValue> minimum;
         std::optional<FloatValue> maximum;
         std::optional<FloatValue> increment;

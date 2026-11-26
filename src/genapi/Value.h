@@ -44,6 +44,29 @@ namespace kickcam::genapi
 
         std::variant<double, Float*, Integer*, Enumeration*> source{0.0};
     };
+
+    // The table entry whose key is the index's current value; fallback without an index or a matching key.
+    template<typename Value, typename Table>
+    std::expected<Value*, std::error_code> select(std::optional<IntValue> const& index, Table& table, Value& fallback)
+    {
+        if (not index)
+        {
+            return &fallback;
+        }
+        auto key = index->get();
+        if (not key)
+        {
+            return std::unexpected(key.error());
+        }
+        for (auto& [entry_key, entry] : table)
+        {
+            if (entry_key == *key)
+            {
+                return &entry;
+            }
+        }
+        return &fallback;
+    }
 }
 
 #endif

@@ -9,7 +9,7 @@ namespace kickcam::genapi
         {
             return minimum->get();
         }
-        return value.min();
+        return select(index, indexed, value).and_then([](IntValue const* current) { return current->min(); });
     }
 
     std::expected<int64_t, std::error_code> IntegerNode::max() const
@@ -18,7 +18,7 @@ namespace kickcam::genapi
         {
             return maximum->get();
         }
-        return value.max();
+        return select(index, indexed, value).and_then([](IntValue const* current) { return current->max(); });
     }
 
     std::expected<int64_t, std::error_code> IntegerNode::inc() const
@@ -27,22 +27,40 @@ namespace kickcam::genapi
         {
             return increment->get();
         }
-        return value.inc();
+        return select(index, indexed, value).and_then([](IntValue const* current) { return current->inc(); });
     }
 
     std::expected<Access, std::error_code> IntegerNode::own_access() const
     {
-        return value.access();
+        return select(index, indexed, value).and_then([](IntValue const* current) { return current->access(); });
     }
 
     std::expected<int64_t, std::error_code> IntegerNode::read() const
     {
-        return value.get();
+        return select(index, indexed, value).and_then([](IntValue const* current) { return current->get(); });
     }
 
     std::expected<void, std::error_code> IntegerNode::write(int64_t new_value)
     {
-        return value.set(new_value);
+        auto current = select(index, indexed, value);
+        if (not current)
+        {
+            return std::unexpected(current.error());
+        }
+        auto written = (*current)->set(new_value);
+        if (not written)
+        {
+            return written;
+        }
+        for (IntValue& copy : copies)
+        {
+            auto copied = copy.set(new_value);
+            if (not copied)
+            {
+                return copied;
+            }
+        }
+        return {};
     }
 
     std::expected<double, std::error_code> FloatNode::min() const
@@ -51,7 +69,7 @@ namespace kickcam::genapi
         {
             return minimum->get();
         }
-        return value.min();
+        return select(index, indexed, value).and_then([](FloatValue const* current) { return current->min(); });
     }
 
     std::expected<double, std::error_code> FloatNode::max() const
@@ -60,7 +78,7 @@ namespace kickcam::genapi
         {
             return maximum->get();
         }
-        return value.max();
+        return select(index, indexed, value).and_then([](FloatValue const* current) { return current->max(); });
     }
 
     std::expected<std::optional<double>, std::error_code> FloatNode::inc() const
@@ -69,22 +87,22 @@ namespace kickcam::genapi
         {
             return increment->get();
         }
-        return value.inc();
+        return select(index, indexed, value).and_then([](FloatValue const* current) { return current->inc(); });
     }
 
     std::expected<Access, std::error_code> FloatNode::own_access() const
     {
-        return value.access();
+        return select(index, indexed, value).and_then([](FloatValue const* current) { return current->access(); });
     }
 
     std::expected<double, std::error_code> FloatNode::read() const
     {
-        return value.get();
+        return select(index, indexed, value).and_then([](FloatValue const* current) { return current->get(); });
     }
 
     std::expected<void, std::error_code> FloatNode::write(double new_value)
     {
-        return value.set(new_value);
+        return select(index, indexed, value).and_then([new_value](FloatValue* current) { return current->set(new_value); });
     }
 
     std::expected<bool, std::error_code> BooleanNode::get() const

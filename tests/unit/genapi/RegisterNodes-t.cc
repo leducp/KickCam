@@ -174,3 +174,35 @@ TEST_F(RegisterNodes, RegisterMovesRawBytes)
     EXPECT_EQ(lut->get(), data);
     EXPECT_EQ(error_of(lut->set(std::vector<uint8_t>{1, 2})), Errc::out_of_range);
 }
+
+TEST_F(RegisterNodes, IndexMovesTheAddress)
+{
+    ASSERT_TRUE(parse(R"(<IntReg Name="Gain"><Address>0x10</Address><pIndex Offset="4">Channel</pIndex><Length>4</Length><pPort>Device</pPort></IntReg>
+                         <IntReg Name="Lut"><Address>0x40</Address><pIndex>Channel</pIndex><Length>2</Length><pPort>Device</pPort></IntReg>
+                         <IntReg Name="Black"><Address>0x60</Address><pIndex pOffset="Stride">Channel</pIndex><Length>1</Length><pPort>Device</pPort></IntReg>
+                         <Integer Name="Channel"><Value>2</Value></Integer>
+                         <Integer Name="Stride"><Value>8</Value></Integer>)"));
+    port.store(0x18, {7});
+    port.store(0x44, {8});
+    port.store(0x70, {9});
+    EXPECT_EQ(map->get<Integer>("Gain")->get(), 7);
+    EXPECT_EQ(map->get<Integer>("Lut")->get(), 8);
+    EXPECT_EQ(map->get<Integer>("Black")->get(), 9);
+}
+
+TEST_F(RegisterNodes, StructEntriesShareTheirRegister)
+{
+    ASSERT_TRUE(parse(R"(<StructReg Comment="Flags">
+                             <Address>0x20</Address><Length>2</Length><AccessMode>RW</AccessMode><pPort>Device</pPort><Endianess>LittleEndian</Endianess>
+                             <StructEntry Name="Enable"><Bit>0</Bit></StructEntry>
+                             <StructEntry Name="Mode"><LSB>4</LSB><MSB>7</MSB></StructEntry>
+                             <StructEntry Name="Status"><AccessMode>RO</AccessMode><LSB>8</LSB><MSB>15</MSB></StructEntry>
+                         </StructReg>)"));
+    port.store(0x20, {0x31, 0xAB});
+    EXPECT_EQ(map->get<Integer>("Enable")->get(), 1);
+    EXPECT_EQ(map->get<Integer>("Mode")->get(), 3);
+    EXPECT_EQ(map->get<Integer>("Status")->get(), 0xAB);
+    EXPECT_TRUE(map->get<Integer>("Mode")->set(5));
+    EXPECT_EQ(port.load(0x20, 2), (std::vector<uint8_t>{0x51, 0xAB}));
+    EXPECT_EQ(error_of(map->get<Integer>("Status")->set(1)), Errc::not_writable);
+}

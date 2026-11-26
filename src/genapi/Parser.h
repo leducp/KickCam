@@ -26,6 +26,7 @@ namespace kickcam::genapi
     private:
         // Creates every node before any is configured: a reference can name a node defined later.
         std::expected<void, std::string> create(tinyxml2::XMLElement const* parent);
+        std::expected<void, std::string> create_node(tinyxml2::XMLElement const* element);
         std::expected<void, std::string> create_entries(EnumerationNode& enumeration, tinyxml2::XMLElement const* element);
 
         // Fails when the element has no Name, or a name already in the map.
@@ -62,8 +63,8 @@ namespace kickcam::genapi
         // pVariable, Constant and Expression; returns false for another child. T is the formula's type.
         template<typename T>
         std::expected<bool, std::string> variable_element(Variables& variables, std::vector<std::string_view>& expressions,
-                                                          tinyxml2::XMLElement const* child) const;
-        std::expected<void, std::string> resolve_variable(Variables::Variable& variable, tinyxml2::XMLElement const* child) const;
+                                                          tinyxml2::XMLElement const* child);
+        std::expected<void, std::string> resolve_variable(Variables::Variable& variable, tinyxml2::XMLElement const* child);
 
         // Parses the Expression elements once every name is known.
         std::expected<void, std::string> finish(Variables& variables, std::span<std::string_view const> expressions,
@@ -85,13 +86,22 @@ namespace kickcam::genapi
 
         // "unknown node" when the name is not in the map, "is not <kind>" when the node has another type.
         std::string not_found(tinyxml2::XMLElement const* child, std::string_view kind) const;
-        std::expected<IntValue, std::string> int_value(tinyxml2::XMLElement const* child) const;
-        std::expected<FloatValue, std::string> float_value(tinyxml2::XMLElement const* child) const;
+        // Both record the reference for check_cycles.
+        std::expected<IntValue, std::string> int_value(tinyxml2::XMLElement const* child);
+        std::expected<FloatValue, std::string> float_value(tinyxml2::XMLElement const* child);
+
+        // Names the first loop of references found, in document order.
+        std::expected<void, std::string> check_cycles() const;
 
         Port& port_;
         NodeMap map_;
         std::unordered_map<std::string_view, PortNode*> ports_; // views of each port's own name
         std::vector<std::function<std::expected<void, std::string>()>> pending_;
+
+        // What each node reads to evaluate, in the order nodes were created.
+        Node const* current_{nullptr};
+        std::vector<Node const*> order_;
+        std::unordered_map<Node const*, std::vector<Node const*>> references_;
     };
 }
 
