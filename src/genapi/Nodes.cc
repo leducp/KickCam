@@ -1,8 +1,5 @@
-#include <limits>
-
 #include "kickcam/Error.h"
 #include "genapi/Nodes.h"
-#include "genapi/Number.h"
 
 namespace kickcam::genapi
 {
@@ -12,12 +9,7 @@ namespace kickcam::genapi
         {
             return minimum->get();
         }
-        return std::visit<std::expected<int64_t, std::error_code>>(Overloaded
-        {
-            [](Integer* integer) { return integer->min(); },
-            [](Float* real) { return real->min().transform(saturate); },
-            [](auto) { return std::numeric_limits<int64_t>::min(); },
-        }, value.source);
+        return value.min();
     }
 
     std::expected<int64_t, std::error_code> IntegerNode::max() const
@@ -26,12 +18,7 @@ namespace kickcam::genapi
         {
             return maximum->get();
         }
-        return std::visit<std::expected<int64_t, std::error_code>>(Overloaded
-        {
-            [](Integer* integer) { return integer->max(); },
-            [](Float* real) { return real->max().transform(saturate); },
-            [](auto) { return std::numeric_limits<int64_t>::max(); },
-        }, value.source);
+        return value.max();
     }
 
     std::expected<int64_t, std::error_code> IntegerNode::inc() const
@@ -40,11 +27,7 @@ namespace kickcam::genapi
         {
             return increment->get();
         }
-        return std::visit<std::expected<int64_t, std::error_code>>(Overloaded
-        {
-            [](Integer* integer) { return integer->inc(); },
-            [](auto) { return int64_t{1}; },
-        }, value.source);
+        return value.inc();
     }
 
     std::expected<Access, std::error_code> IntegerNode::own_access() const
@@ -68,12 +51,7 @@ namespace kickcam::genapi
         {
             return minimum->get();
         }
-        return std::visit<std::expected<double, std::error_code>>(Overloaded
-        {
-            [](Float* real) { return real->min(); },
-            [](Integer* integer) { return integer->min(); },
-            [](auto) { return std::numeric_limits<double>::lowest(); },
-        }, value.source);
+        return value.min();
     }
 
     std::expected<double, std::error_code> FloatNode::max() const
@@ -82,12 +60,7 @@ namespace kickcam::genapi
         {
             return maximum->get();
         }
-        return std::visit<std::expected<double, std::error_code>>(Overloaded
-        {
-            [](Float* real) { return real->max(); },
-            [](Integer* integer) { return integer->max(); },
-            [](auto) { return std::numeric_limits<double>::max(); },
-        }, value.source);
+        return value.max();
     }
 
     std::expected<std::optional<double>, std::error_code> FloatNode::inc() const
@@ -96,12 +69,7 @@ namespace kickcam::genapi
         {
             return increment->get();
         }
-        return std::visit<std::expected<std::optional<double>, std::error_code>>(Overloaded
-        {
-            [](Float* real) { return real->inc(); },
-            [](Integer* integer) { return integer->inc(); },
-            [](auto) { return std::nullopt; },
-        }, value.source);
+        return value.inc();
     }
 
     std::expected<Access, std::error_code> FloatNode::own_access() const

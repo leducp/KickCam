@@ -44,8 +44,8 @@ TEST(Parser, RejectsADocumentWithoutElements)
 
 TEST(Parser, NamesUnsupportedNodeTypes)
 {
-    EXPECT_EQ(parse_error(R"(<SwissKnife Name="Gain"><Formula>1</Formula></SwissKnife>)"),
-              "SwissKnife 'Gain': unsupported node type");
+    EXPECT_EQ(parse_error(R"(<ConfRom Name="Rom"><Unit>0</Unit><Address>0</Address><Length>4</Length><pPort>Device</pPort></ConfRom>)"),
+              "ConfRom 'Rom': unsupported node type");
 }
 
 TEST(Parser, NamesUnsupportedElements)
@@ -159,8 +159,28 @@ TEST(Parser, ChecksRegisterDefinitions)
     EXPECT_EQ(parse_error(R"(<FloatReg Name="Gain"><Address>0</Address><Length>4</Length><pLength>Size</pLength><pPort>Device</pPort></FloatReg>
                              <Integer Name="Size"><Value>4</Value></Integer>)"),
               "FloatReg 'Gain': unsupported element <pLength>");
-    EXPECT_EQ(parse_error(R"(<IntReg Name="Width"><IntSwissKnife Name="Offset"><Formula>4</Formula></IntSwissKnife><Length>4</Length><pPort>Device</pPort></IntReg>)"),
-              "IntReg 'Width': unsupported element <IntSwissKnife>");
+}
+
+TEST(Parser, ChecksFormulaNodes)
+{
+    EXPECT_EQ(parse_error(R"(<SwissKnife Name="Gain"><Formula>X + 1</Formula></SwissKnife>)"),
+              "SwissKnife 'Gain': <Formula>: unknown name 'X'");
+    EXPECT_EQ(parse_error(R"(<SwissKnife Name="Gain"><Constant Name="A">1</Constant></SwissKnife>)"),
+              "SwissKnife 'Gain': no <Formula>");
+    EXPECT_EQ(parse_error(R"(<SwissKnife Name="Gain"><Expression Name="E">1 +</Expression><Formula>E</Formula></SwissKnife>)"),
+              "SwissKnife 'Gain': <Expression>: unexpected end");
+    EXPECT_EQ(parse_error(R"(<Converter Name="Gain"><FormulaTo>FROM</FormulaTo><pValue>Raw</pValue></Converter>
+                             <Integer Name="Raw"><Value>1</Value></Integer>)"),
+              "Converter 'Gain': no <FormulaFrom>");
+    EXPECT_EQ(parse_error(R"(<IntSwissKnife Name="Gain"><pVariable Name="M.Entry.Mono16">Mode</pVariable><Formula>1</Formula></IntSwissKnife>
+                             <Enumeration Name="Mode"><EnumEntry Name="Mono8"><Value>1</Value></EnumEntry><Value>1</Value></Enumeration>)"),
+              "IntSwissKnife 'Gain': unknown entry 'Mono16' in <pVariable>");
+    EXPECT_EQ(parse_error(R"(<IntSwissKnife Name="Gain"><pVariable Name="M.Max">Mode</pVariable><Formula>1</Formula></IntSwissKnife>
+                             <Enumeration Name="Mode"><EnumEntry Name="Mono8"><Value>1</Value></EnumEntry><Value>1</Value></Enumeration>)"),
+              "IntSwissKnife 'Gain': <pVariable> 'M.Max' needs an integer or a float");
+    EXPECT_EQ(parse_error(R"(<IntSwissKnife Name="Gain"><pVariable Name="W.AccessMode">Width</pVariable><Formula>1</Formula></IntSwissKnife>
+                             <Integer Name="Width"><Value>1</Value></Integer>)"),
+              "IntSwissKnife 'Gain': unsupported <pVariable> 'W.AccessMode'");
 }
 
 TEST(Parser, RejectsSwappedPorts)

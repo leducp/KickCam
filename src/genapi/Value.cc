@@ -1,3 +1,5 @@
+#include <limits>
+
 #include "genapi/Number.h"
 #include "genapi/Value.h"
 
@@ -72,6 +74,65 @@ namespace kickcam::genapi
         {
             [](double) { return Access::RW; },
             [](Node const* node) { return node->access(); },
+        }, source);
+    }
+
+    std::expected<int64_t, std::error_code> IntValue::min() const
+    {
+        return std::visit<std::expected<int64_t, std::error_code>>(Overloaded
+        {
+            [](Integer* integer) { return integer->min(); },
+            [](Float* real) { return real->min().transform(saturate); },
+            [](auto) { return std::numeric_limits<int64_t>::min(); },
+        }, source);
+    }
+
+    std::expected<int64_t, std::error_code> IntValue::max() const
+    {
+        return std::visit<std::expected<int64_t, std::error_code>>(Overloaded
+        {
+            [](Integer* integer) { return integer->max(); },
+            [](Float* real) { return real->max().transform(saturate); },
+            [](auto) { return std::numeric_limits<int64_t>::max(); },
+        }, source);
+    }
+
+    std::expected<int64_t, std::error_code> IntValue::inc() const
+    {
+        return std::visit<std::expected<int64_t, std::error_code>>(Overloaded
+        {
+            [](Integer* integer) { return integer->inc(); },
+            [](auto) { return int64_t{1}; },
+        }, source);
+    }
+
+    std::expected<double, std::error_code> FloatValue::min() const
+    {
+        return std::visit<std::expected<double, std::error_code>>(Overloaded
+        {
+            [](Float* real) { return real->min(); },
+            [](Integer* integer) { return integer->min(); },
+            [](auto) { return std::numeric_limits<double>::lowest(); },
+        }, source);
+    }
+
+    std::expected<double, std::error_code> FloatValue::max() const
+    {
+        return std::visit<std::expected<double, std::error_code>>(Overloaded
+        {
+            [](Float* real) { return real->max(); },
+            [](Integer* integer) { return integer->max(); },
+            [](auto) { return std::numeric_limits<double>::max(); },
+        }, source);
+    }
+
+    std::expected<std::optional<double>, std::error_code> FloatValue::inc() const
+    {
+        return std::visit<std::expected<std::optional<double>, std::error_code>>(Overloaded
+        {
+            [](Float* real) { return real->inc(); },
+            [](Integer* integer) { return integer->inc(); },
+            [](auto) { return std::nullopt; },
         }, source);
     }
 }
